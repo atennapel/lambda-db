@@ -22,7 +22,7 @@ const insert = async (db, name, ast) => {
   const hs = await hash(min);
   const data = await db.all('select name, hash, ast from defs where hash = ?', hs);
   for (let i = 0, l = data.length; i < l; i++)
-    if (data[i].ast === min) throw new Error('a definition with that AST already exists');
+    if (data[i].ast === min) throw new Error(`a definition with that AST already exists: ${data[i].name}`);
   await db.run('insert into defs (name, hash, ast) values (?, ?, ?)', [name, hs, min]);
   return { name, hash: hs, ast: min };
 };

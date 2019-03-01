@@ -15,11 +15,11 @@ else {
         const n = await normalize(db, nl);
         await insert(db, name, n);
         const o = await get(db, name);
-        console.log(`${o.name} = ${toNamed(parseMinimal(o.ast))}`);
+        console.log(`${o.name} (${o.hash}) = ${toNamed(parseMinimal(o.ast))}`);
       } else if (cmd === 'get') {
         const name = parseName(args[3]);
         const o = await get(db, name);
-        console.log(`${o.name} = ${toNamed(parseMinimal(o.ast))}`);
+        console.log(`${o.name} (${o.hash}) = ${toNamed(parseMinimal(o.ast))}`);
       } else if (cmd === 'remove') {
         const name = parseName(args[3]);
         await remove(db, name);
