@@ -29,7 +29,11 @@ const insert = async (db, name, ast) => {
 
 const remove = (db, name) => db.run('delete from defs where name = ?', name);
 
-const get = (db, name) => db.get('select name, hash, ast from defs where name = ?', name);
+const get = async (db, name) => {
+  const res = await db.get('select name, hash, ast from defs where name = ?', name);
+  if (!res) throw new Error(`definition not found: ${name}`);
+  return res;
+};
 
 const substAll = async (db, ast) => {
   const assoc = await Promise.all(Object.keys(free(ast)).map(name => get(db, name).then(o => [name, o.ast])));
