@@ -104,6 +104,17 @@ const substFree = (env, expr) => {
     return new App(substFree(env, expr.left), substFree(env, expr.right));
 };
 
+const isClosed = (expr, id = 0) => {
+  if (expr instanceof Var) {
+    const name = expr.name;
+    if (typeof name === 'string') return false;
+    return name < id;
+  }
+  if (expr instanceof Abs) return isClosed(expr.body, id + 1);
+  if (expr instanceof App)
+    return isClosed(expr.left, id) && isClosed(expr.right, id);
+};
+
 module.exports = {
   Var, vr,
   Abs, abs,
@@ -117,4 +128,5 @@ module.exports = {
   reduce,
 
   substFree,
+  isClosed,
 };
