@@ -10,6 +10,38 @@ function App(left, right) { this.left = left; this.right = right }
 App.prototype.toString = function() { return `(${this.left} ${this.right})` };
 function app() { return Array.prototype.slice.call(arguments).reduce((x, y) => new App(x, y)) }
 
+const flattenApp = expr => {
+  const r = [];
+  let c = expr;
+  while (c instanceof App) {
+    r.push(c.right);
+    c = c.left;
+  }
+  r.push(c);
+  return r.reverse();
+};
+const flattenAbs = expr => {
+  const args = [];
+  let c = expr;
+  while (c instanceof Abs) {
+    args.push(c.name);
+    c = c.body;
+  }
+  return [args, c];
+};
+
+const pretty = expr => {
+  if (expr instanceof Var) return `${expr.name}`;
+  if (expr instanceof Abs) {
+    const f = flattenAbs(expr);
+    return `\\${f[0].join(' ')}. ${pretty(f[1])}`;
+  }
+  if (expr instanceof App) {
+    const f = flattenApp(expr);
+    return `${f.map(x => x instanceof Abs || x instanceof App ? `(${pretty(x)})` : pretty(x)).join(' ')}`;
+  }
+};
+
 const toMinimal = expr => {
   if (expr instanceof Var) return `#${expr.name}`;
   if (expr instanceof Abs) return `\\${toMinimal(expr.body)}`;
@@ -84,16 +116,49 @@ const subst = (j, s, expr) => {
 
 const open = (abs, u) => shift(-1, 0, subst(0, shift(1, 0, u), abs.body));
 
-const reduce = expr => {
-  if (expr instanceof Var) return expr;
-  if (expr instanceof Abs)
-    return new Abs(expr.name, reduce(expr.body));
-  if (expr instanceof App) {
-    const fn = reduce(expr.left);
-    return fn instanceof Abs ?
-      reduce(open(fn, expr.right)) :
-      new App(fn, reduce(expr.right));
+const step = expr => {
+  if (expr instanceof Var) return null;
+  if (expr instanceof Abs) {
+    //const b = step(expr.body);
+    //if (b) return new Abs(expr.name, b);
+    const body = expr.body;
+    if (body instanceof App && body.right instanceof Var && body.right.name === 0)
+      return body.left;
+    return null;
   }
+  if (expr instanceof App) {
+    const left = step(expr.left);
+    if (left) return new App(left, expr.right);
+    const right = step(expr.right);
+    if (right) return new App(expr.left, right);
+    if (expr.left instanceof Abs)
+      return open(expr.left, expr.right);
+    //const right = step(expr.right);
+    //if (right) return new App(expr.left, right);
+    return null;
+  }
+};
+
+const stepTop = expr => step(expr) || expr;
+
+const reduce = expr => {
+  let p = expr;
+  let c = expr;
+  while (c) {
+    p = c;
+    c = step(c);
+  }
+  return p;
+};
+
+const steps = expr => {
+  const r = [];
+  let c = expr;
+  while (c) {
+    r.push(c)
+    c = step(c);
+  }
+  return r;
 };
 
 const substFree = (env, expr) => {
@@ -120,12 +185,16 @@ module.exports = {
   Abs, abs,
   App, app,
 
+  pretty,
+
   toMinimal,
   toNameless,
   toNamed,
 
   free,
   reduce,
+  step: stepTop,
+  steps,
 
   substFree,
   isClosed,

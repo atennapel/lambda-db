@@ -1,5 +1,5 @@
-const { toNameless, toNamed } = require('./lambda');
-const { initialize, insert, remove, get, normalize } = require('./database');
+const { toNameless, toNamed, steps, step, pretty } = require('./lambda');
+const { initialize, insert, remove, get, normalize, substAll } = require('./database');
 const { parseMinimal, parse, parseName } = require('./parser');
 
 const args = process.argv;
@@ -15,11 +15,11 @@ else {
         const n = await normalize(db, nl);
         await insert(db, name, n);
         const o = await get(db, name);
-        console.log(`${o.name} (${o.hash}) = ${toNamed(parseMinimal(o.ast))}`);
+        console.log(`${o.name} (${o.hash}) = ${pretty(toNamed(parseMinimal(o.ast)))}`);
       } else if (cmd === 'get') {
         const name = parseName(args[3]);
         const o = await get(db, name);
-        console.log(`${o.name} (${o.hash}) = ${toNamed(parseMinimal(o.ast))}`);
+        console.log(`${o.name} (${o.hash}) = ${pretty(toNamed(parseMinimal(o.ast)))}`);
       } else if (cmd === 'remove') {
         const name = parseName(args[3]);
         await remove(db, name);
@@ -27,7 +27,12 @@ else {
       } else if (cmd === 'eval') {
         const nl = toNameless(parse(args[3]));
         const n = await normalize(db, nl);
-        console.log(`${toNamed(n)}`);
+        console.log(`${pretty(toNamed(n))}`);
+      } else if (cmd === 'steps') {
+        const nl = toNameless(parse(args[3]));
+        const n = await substAll(db, nl);
+        const st = steps(n);
+        console.log(st.map((x, i) => `${i+1}. ${pretty(toNamed(x))}`).join('\n'));
       } else if (cmd === 'parse') {
         console.log(`${parse(args[3])}`);
       } else console.log('usage: def name expr OR get name OR remove name OR eval expr OR parse expr');
