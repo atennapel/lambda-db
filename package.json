@@ -10,7 +10,5 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "murmurhash-native": "^3.3.0",
-    "sqlite": "^3.0.2"
   }
 }
