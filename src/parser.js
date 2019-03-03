@@ -104,7 +104,7 @@ const parseExprTop = s => {
 };
 
 const parseMinimal = s => {
-  const ts = s.match(/@|\\|#[0-9]+/g);
+  const ts = s.match(/@|\\|#[a-zA-Z0-9]+|\*|\//g);
   if (ts.length === 0) throw new SyntaxError(`parseMinimal failed on ${s}`);
   let id = 0;
   const stack = [];
@@ -114,12 +114,14 @@ const parseMinimal = s => {
       if (stack.length < 2) throw new SyntaxError(`parseMinimal failed on ${s}`);
       stack.push(new App(stack.pop(), stack.pop()));
     } else if (c === '\\') {
-      if (stack.length < 1) throw new SyntaxError(`parseMinimal failed on ${s}`);
-      stack.push(new Abs(`p\$${id++}`, stack.pop()));
+      if (stack.length < 2) throw new SyntaxError(`parseMinimal failed on ${s}`);
+      stack.push(new Abs(`p\$${id++}`, stack.pop(), stack.pop()));
     } else if (c[0] === '#') {
-      const n = +c.slice(1);
-      if (isNaN(n)) throw new SyntaxError(`parseMinimal failed on ${s}`);
-      stack.push(new Var(n));
+      const txt = c.slice(1);
+      const n = +txt;
+      stack.push(new Var(isNaN(n) ? txt : n));
+    } else if (c === '*' || c === '/') {
+      stack.push(new Var(c));
     } else throw new SyntaxError(`parseMinimal failed on ${s}`);
   }
   if (stack.length !== 1) throw new SyntaxError(`parseMinimal failed on ${s}`);

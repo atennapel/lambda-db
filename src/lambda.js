@@ -2,17 +2,22 @@ function Var(name) { this.name = name }
 Var.prototype.toString = function() { return `${this.name}` };
 const vr = name => new Var(name);
 
-function Abs(name, body) { this.name = name; this.body = body }
-Abs.prototype.toString = function() { return `(\\${this.name}. ${this.body})` };
-const abs = (ns, body) => ns.reduceRight((x, y) => new Abs(y, x), body);
+function Abs(name, type, body) { this.name = name; this.type = type; this.body = body }
+Abs.prototype.toString = function() { return `(\\(${this.name} : ${this.type}). ${this.body})` };
+const abs = (ns, body) => ns.reduceRight((x, [y, t]) => new Abs(y, t, x), body);
 
 function App(left, right) { this.left = left; this.right = right }
 App.prototype.toString = function() { return `(${this.left} ${this.right})` };
 function app() { return Array.prototype.slice.call(arguments).reduce((x, y) => new App(x, y)) }
 
+const Type = vr('*');
+const Pi = vr('/');
+
 const toMinimal = expr => {
-  if (expr instanceof Var) return `#${expr.name}`;
-  if (expr instanceof Abs) return `\\${toMinimal(expr.body)}`;
+  if (expr instanceof Var)
+    return expr.name === '*' || expr.name === '/' ? expr.name : `#${expr.name}`;
+  if (expr instanceof Abs)
+    return `\\${toMinimal(expr.type)}${toMinimal(expr.body)}`;
   if (expr instanceof App)
     return `@${toMinimal(expr.left)}${toMinimal(expr.right)}`;
 };
@@ -23,7 +28,7 @@ const toNameless = (expr, id = 0, map = {}) => {
   if (expr instanceof Abs) {
     const nmap = Object.create(map);
     nmap[expr.name] = id;
-    return new Abs(expr.name, toNameless(expr.body, id + 1, nmap));
+    return new Abs(expr.name, toNameless(expr.type, id, map), toNameless(expr.body, id + 1, nmap));
   }
   if (expr instanceof App)
     return new App(toNameless(expr.left, id, map), toNameless(expr.right, id, map));
@@ -36,11 +41,13 @@ const toNamed = (expr, id = 0, map = {}, fresh = { id: 0 }) => {
     return map[id - 1 - name] || expr;
   }
   if (expr instanceof Abs) {
+    const ntype = toNamed(expr.type, id, map, fresh);
     let name = expr.name;
-    if (free(expr)[name]) name = `x\$${fresh.id++}`;
+    const fr = free(expr);
+    while (fr[name]) name = `${expr.name}\$${fresh.id++}`;
     const nmap = Object.create(map);
     nmap[id] = new Var(name);
-    return new Abs(name, toNamed(expr.body, id + 1, nmap, fresh));
+    return new Abs(name, ntype, toNamed(expr.body, id + 1, nmap, fresh));
   }
   if (expr instanceof App)
     return new App(toNamed(expr.left, id, map, fresh), toNamed(expr.right, id, map, fresh));
@@ -53,7 +60,7 @@ const free = (expr, map = {}) => {
     return map;
   }
   if (expr instanceof Abs)
-    return free(expr.body, map);
+    return free(expr.body, free(expr.type, map));
   if (expr instanceof App)
     return free(expr.right, free(expr.left, map));
 };
@@ -65,7 +72,7 @@ const shift = (d, c, expr) => {
     return k < c ? expr : new Var(k + d); 
   }
   if (expr instanceof Abs)
-    return new Abs(expr.name, shift(d, c + 1, expr.body));
+    return new Abs(expr.name, shift(d, c, expr.type), shift(d, c + 1, expr.body));
   if (expr instanceof App)
     return new App(shift(d, c, expr.left), shift(d, c, expr.right));
 };
@@ -77,7 +84,7 @@ const subst = (j, s, expr) => {
     return k === j ? s : expr;
   }
   if (expr instanceof Abs)
-    return new Abs(expr.name, subst(j + 1, shift(1, 0, s), expr.body));
+    return new Abs(expr.name, subst(j, s, expr.type), subst(j + 1, shift(1, 0, s), expr.body));
   if (expr instanceof App)
     return new App(subst(j, s, expr.left), subst(j, s, expr.right));
 };
@@ -87,7 +94,7 @@ const open = (abs, u) => shift(-1, 0, subst(0, shift(1, 0, u), abs.body));
 const reduce = expr => {
   if (expr instanceof Var) return expr;
   if (expr instanceof Abs)
-    return new Abs(expr.name, reduce(expr.body));
+    return new Abs(expr.name, reduce(expr.type), reduce(expr.body));
   if (expr instanceof App) {
     const fn = reduce(expr.left);
     return fn instanceof Abs ?
@@ -99,7 +106,7 @@ const reduce = expr => {
 const substFree = (env, expr) => {
   if (expr instanceof Var) return env[expr.name] || expr;
   if (expr instanceof Abs)
-    return new Abs(expr.name, substFree(env, expr.body));
+    return new Abs(expr.name, substFree(env, expr.type), substFree(env, expr.body));
   if (expr instanceof App)
     return new App(substFree(env, expr.left), substFree(env, expr.right));
 };
@@ -110,15 +117,37 @@ const isClosed = (expr, id = 0) => {
     if (typeof name === 'string') return false;
     return name < id;
   }
-  if (expr instanceof Abs) return isClosed(expr.body, id + 1);
+  if (expr instanceof Abs)
+    return isClosed(expr.type, id) && isClosed(expr.body, id + 1);
   if (expr instanceof App)
     return isClosed(expr.left, id) && isClosed(expr.right, id);
+};
+
+const typeOf = (expr, env = []) => {
+  if (expr instanceof Var) {
+    if (typeof expr.name === 'string')
+      throw new TypeError(`cannot type ${expr.name}`);
+    const ty = env[expr.name];
+    if (!ty) throw new TypeError(`not in env ${expr.name}`);
+    console.log(expr.name, env, ty);
+    return ty;
+  }
+  if (expr instanceof Abs) {
+    const nenv = env.map(x => shift(1, 0, x));
+    nenv.unshift(expr.type);
+    const ty = typeOf(expr.body, nenv);
+    return new App(Pi, new Abs(expr.name, expr.type, ty));
+  }
+  if (expr instanceof App) {
+
+  }
 };
 
 module.exports = {
   Var, vr,
   Abs, abs,
   App, app,
+  Type, Pi,
 
   toMinimal,
   toNameless,
@@ -129,4 +158,6 @@ module.exports = {
 
   substFree,
   isClosed,
+
+  typeOf,
 };
